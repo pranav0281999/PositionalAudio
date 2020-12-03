@@ -1,0 +1,238 @@
+<html lang="en">
+<head>
+    <title>Positional Audio</title>
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+        }
+
+        #c {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #overlay {
+            position: absolute;
+            z-index: 2;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        #overlay button {
+            background: #ffffff;
+            border: 0;
+            color: #000000;
+            padding: 16px 20px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+
+        #info {
+            position: absolute;
+            top: 0px;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            -moz-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            pointer-events: none;
+            z-index: 1; /* TODO Solve this in HTML */
+            color: #9effff;
+        }
+    </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="overlay">
+    <button id="startButton">Play</button>
+</div>
+<div id="info">
+    navigate with WASD / arrows / mouse
+</div>
+<script type="module">
+	import * as THREE from "https://threejsfundamentals.org/threejs/resources/threejs/r122/build/three.module.js";
+	import { FirstPersonControls } from 'https://cdn.jsdelivr.net/npm/three@v0.108.0/examples/jsm/controls/FirstPersonControls.js';
+	import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@v0.108.0/examples/jsm/controls/OrbitControls.js';
+	// import { PositionalAudioHelper } from '../../examples/jsm/helpers/PositionalAudioHelper.js';
+
+	const startButton = document.getElementById( 'startButton' );
+	startButton.addEventListener( 'click', init );
+
+	function init() {
+
+		document.getElementById( "overlay" ).remove();
+
+		//to switch between different controls
+		const controlFirstPerson = true;
+
+		const canvas = document.getElementById( "c" );
+		let renderer = new THREE.WebGLRenderer( { canvas } );
+
+		const clock = new THREE.Clock();
+
+		let scene = new THREE.Scene();
+		scene.background = 0x000000;
+
+		const fov = 45;
+		const aspect = window.innerWidth / window.innerHeight;
+		const far = 700;
+		const near = 10;
+		let camera = new THREE.PerspectiveCamera( fov, aspect, far, near );
+		camera.position.y = 15;
+
+		const audioLoader = new THREE.AudioLoader();
+
+		const listener = new THREE.AudioListener();
+		camera.add( listener );
+
+		//lists different audio video tracks to play
+		const soundList = [ "resources/jazz-video-audio.mp3", "resources/piano-video-audio.mp3", "resources/singing_bird_audio.mp3", "resources/cicada_audio.mp3" ];
+		const videoList = [ "resources/jazz-video.mp4", "resources/piano-video.mp4", "resources/singing-bird.mp4", "resources/cicada.webm" ];
+
+		//uses audio video list and adds a screen in scene for each, works only for 4 tracks
+		for (let i = 0; i < ( soundList.length > 4 ? 4 : soundList.length ); i ++) {
+
+			let videoScreen = new THREE.Object3D();
+
+			let video = document.createElement( 'video' );
+			video.src = videoList[i];
+			video.load();
+			video.muted = true;
+			video.loop = true;
+
+			const positionalAudio = new THREE.PositionalAudio( listener );
+			audioLoader.load( soundList[i], function ( buffer ) {
+
+				positionalAudio.setBuffer( buffer );
+				positionalAudio.setRefDistance( 20 );
+				positionalAudio.loop = true;
+				positionalAudio.play();
+				positionalAudio.setDirectionalCone( 180, 230, 0.1 );
+				positionalAudio.position.y = 2;
+				positionalAudio.position.z = 30;
+
+				// const soundHelper = new PositionalAudioHelper( positionalAudio );
+				// soundHelper.scale.set( 5, 5, 5 );
+				// positionalAudio.add( soundHelper );
+
+				video.play();
+			} );
+
+			let videoTexture = new THREE.VideoTexture( video );
+			videoTexture.minFilter = THREE.LinearFilter;
+			videoTexture.magFilter = THREE.LinearFilter;
+			videoTexture.format = THREE.RGBFormat;
+
+			let planeMesh = new THREE.Mesh(
+				new THREE.PlaneGeometry( 1, 1, 2, 2 ),
+				new THREE.MeshBasicMaterial( { map: videoTexture, side: THREE.DoubleSide } )
+			);
+
+			videoScreen.add( planeMesh );
+			videoScreen.add( positionalAudio );
+
+			if (i > 1) {
+				if (i % 2) {
+					videoScreen.rotation.y = - 0 * Math.PI / 180;
+					videoScreen.position.z = - 250;
+				} else {
+					videoScreen.rotation.y = 90 * Math.PI / 180;
+					videoScreen.position.x = - 250;
+				}
+			} else {
+				if (i % 2) {
+					videoScreen.rotation.y = 180 * Math.PI / 180;
+					videoScreen.position.z = 250;
+				} else {
+					videoScreen.rotation.y = - 90 * Math.PI / 180;
+					videoScreen.position.x = 250;
+				}
+			}
+
+			video.onloadeddata = function () {
+				const aspectRatio = video.videoWidth / video.videoHeight;
+				planeMesh.scale.set( 30 * aspectRatio, 30, 1 );
+				planeMesh.position.y = 15;
+			};
+
+			scene.add( videoScreen );
+		}
+
+		let gridHelper = new THREE.GridHelper( 500, 20 );
+		scene.add( gridHelper );
+
+		let controls = null;
+
+		//to switch between different controls
+		if (controlFirstPerson) {
+			controls = new FirstPersonControls( camera, renderer.domElement );
+			controls.movementSpeed = 100;
+			controls.lookSpeed = 0.1;
+			controls.lookVertical = false;
+		} else {
+			controls = new OrbitControls( camera, renderer.domElement );
+			controls.target.set( 0, 0, 0 );
+			controls.update();
+			controls.minDistance = 1;
+			controls.maxDistance = 700;
+			controls.maxPolarAngle = 0.5 * Math.PI;
+		}
+
+		function resizeRendererToDisplaySize( renderer ) {
+			const canvas = renderer.domElement;
+			const pixelRatio = window.devicePixelRatio;
+			const width = canvas.clientWidth * pixelRatio | 0;
+			const height = canvas.clientHeight * pixelRatio | 0;
+			const needResize = canvas.width !== width || canvas.height !== height;
+			if (needResize) {
+
+				renderer.setSize( width, height, false );
+
+			}
+
+			return needResize;
+
+		}
+
+		function render( time ) {
+			const delta = clock.getDelta();
+
+			//only required if FirstPersonControls is used
+			if (controlFirstPerson) {
+				controls.update( delta );
+			}
+
+			if (resizeRendererToDisplaySize( renderer )) {
+				const canvas = renderer.domElement;
+				camera.aspect = canvas.clientWidth / canvas.clientHeight;
+				camera.updateProjectionMatrix();
+
+				//only required if FirstPersonControls is used
+				if (controlFirstPerson) {
+					controls.handleResize();
+				}
+			}
+
+			renderer.render( scene, camera );
+
+			requestAnimationFrame( render );
+		}
+
+		requestAnimationFrame( render );
+
+	}
+</script>
+</body>
+</html>
